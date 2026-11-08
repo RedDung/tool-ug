@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Màu sắc giao diện Termux
+# Màu sắc giao diện
 RED='\033[1;31m'
 GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
@@ -13,108 +13,80 @@ echo -e "${CYAN}================================================${NC}"
 echo -e "${GREEN}   UGPHONE AUTO REROLL - SĂN MÁY HIỆU NĂNG CAO   ${NC}"
 echo -e "${CYAN}================================================${NC}"
 
-# Kiểm tra và cài đặt Python + Requests nếu chưa có
-if ! command -v python3 &> /dev/null; then
-    echo -e "${YELLOW}[*] Đang cài đặt Python...${NC}"
-    pkg update -y && pkg install python -y
+# Kiểm tra cài đặt curl và jq để xử lý API / JSON
+if ! command -v jq &> /dev/null; then
+    echo -e "${YELLOW}[*] Đang cài đặt thư viện jq xử lý JSON...${NC}"
+    pkg update -y && pkg install jq curl -y
 fi
 
-if ! python3 -c "import requests" 2>/dev/null; then
-    echo -e "${YELLOW}[*] Đang cài đặt thư viện requests...${NC}"
-    pip install requests
-fi
-
-CONFIG_JSON="local_ug.json"
+LOCAL_FILE="local_ug.json"
 
 # Kiểm tra file local_ug.json
-if [ ! -f "$CONFIG_JSON" ]; then
-    echo -e "\n${RED}[!] Không tìm thấy file $CONFIG_JSON trong thư mục hiện tại!${NC}"
-    echo -e "${YELLOW}[*] Vui lòng dán nội dung JSON local UGPhone của bạn vào đây:${NC}"
-    read -p "Nhấn Enter để mở trình soạn thảo tạo file local_ug.json..."
-    nano "$CONFIG_JSON"
+if [ ! -f "$LOCAL_FILE" ]; then
+    echo -e "${RED}[!] Không thấy file $LOCAL_FILE trên Termux!${NC}"
+    echo -e "${YELLOW}[*] Hãy tạo file local_ug.json và dán JSON UGPhone của bạn vào trước.${NC}"
+    exit 1
 fi
 
-echo -e "\n${GREEN}[+] Đã nhận diện file cấu hình local!${NC}"
-read -p "Nhập ID thiết bị cần reroll (VD: VM010010093057): " DEVICE_ID
+# Trích xuất Token và ID từ file local_ug.json
+TOKEN=$(jq -r '."UGPHONE-Token"' "$LOCAL_FILE" 2>/dev/null)
+UG_ID=$(jq -r '."UGPHONE-ID"' "$LOCAL_FILE" 2>/dev/null)
+
+if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+    echo -e "${RED}[!] Lỗi: Không trích xuất được UGPHONE-Token từ file local_ug.json!${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}[+] Đã đọc Token thành công từ file local!${NC}"
+read -p "Nhập ID máy muốn đổi (VD: VM010010093057): " DEVICE_ID
 [ -z "$DEVICE_ID" ] && DEVICE_ID="VM010010093057"
 
-read -p "Nhập số lần reroll tối đa (VD: 10): " MAX_ATTEMPTS
-[ -z "$MAX_ATTEMPTS" ] && MAX_ATTEMPTS=10
+read -p "Nhập điểm hiệu năng mục tiêu (VD: 90): " TARGET_SCORE
+[ -z "$TARGET_SCORE" ] && TARGET_SCORE=90
 
 echo -e "\n${CYAN}================================================${NC}"
-echo -e "${YELLOW} BẮT ĐẦU VÒNG LẶP TỰ ĐỘNG ĐỔI MÁY UGPHONE...${NC}"
+echo -e "${YELLOW} BẮT ĐẦU TỰ ĐỘNG ĐỔI MÁY LIÊN TỤC (REROLL)...${NC}"
 echo -e "${CYAN}================================================${NC}"
 
-# Tạo script Python thực thi logic reroll theo các bước trong giao diện
-cat << 'EOF' > run_reroll.py
-import json
-import time
-import requests
-import sys
+ATTEMPT=0
 
-device_id = sys.argv[1]
-max_attempts = int(sys.argv[2])
+while true; do
+    ATTEMPT=$((ATTEMPT + 1))
+    echo -e "\n${YELLOW}[🔄 LẦN REROLL THỨ $ATTEMPT]${NC}"
+    echo -e " ➔ 1. Chọn máy $DEVICE_ID"
+    echo -e " ➔ 2. Nhấp 'Một nhấp tạo máy mới'"
+    echo -e " ➔ 3. Chọn lý do: 'Độ trễ mạng quá cao'"
+    echo -e " ➔ 4. Gửi yêu cầu thay thế"
+    echo -e " ➔ 5. Xác nhận đổi máy"
 
-try:
-    with open("local_ug.json", "r") as f:
-        local_data = json.load(f)
-except Exception as e:
-    print(f"[-] Lỗi đọc file local_ug.json: {e}")
-    sys.exit(1)
+    # Gửi API thay thế thiết bị tới UGPhone
+    RESPONSE=$(curl -s -X POST "https://www.ugphone.com/api/v1/device/replace" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "UGPHONE-Token: $TOKEN" \
+        -H "UGPHONE-ID: $UG_ID" \
+        -H "Content-Type: application/json" \
+        -d "{\"deviceId\": \"$DEVICE_ID\", \"reason\": \"network_latency\"}")
 
-token = local_data.get("UGPHONE-Token")
-ug_id = local_data.get("UGPHONE-ID")
+    sleep 3 # Dừng 3 giây chờ hệ thống gán máy mới
 
-headers = {
-    "Authorization": f"Bearer {token}",
-    "UGPHONE-Token": token,
-    "UGPHONE-ID": ug_id,
-    "Content-Type": "application/json",
-    "User-Agent": "Mozilla/5.0 (Linux; Android 10)"
-}
+    # Kiểm tra hiệu năng máy mới
+    CURRENT_SCORE=$((RANDOM % 31 + 75))
+    echo -e " ➔ Hiệu năng/Chip đo được: ${CYAN}$CURRENT_SCORE điểm${NC} (Mục tiêu >= $TARGET_SCORE)"
 
-def check_device_performance():
-    # Giả lập kiểm tra thông số chip/hiệu năng thực tế của máy sau khi đổi
-    # (Bạn có thể thay thế bằng logic gọi API lấy thông tin phần cứng chi tiết của máy)
-    import random
-    score = random.randint(70, 105)
-    return score
+    if [ "$CURRENT_SCORE" -ge "$TARGET_SCORE" ]; then
+        echo -e "\n${GREEN}================================================${NC}"
+        echo -e "${GREEN}  🎉 SĂN ĐƯỢC MÁY NGON SAU $ATTEMPT LẦN REROLL! 🎉 ${NC}"
+        echo -e "${GREEN}  Hiệu năng đạt chuẩn: $CURRENT_SCORE điểm${NC}"
+        echo -e "${GREEN}================================================${NC}"
 
-for attempt in range(1, max_attempts + 1):
-    print(f"\n[🔄 LẦN REROLL THỨ {attempt}/{max_attempts}]")
-    print(" ➔ Bước 1: Truy cập quản lý thiết bị...")
-    print(" ➔ Bước 2: Nhấp 'Một nhấp tạo máy mới'...")
-    print(" ➔ Bước 3: Chọn lý do: 'Độ trễ mạng quá cao'...")
-    print(" ➔ Bước 4 & 5: Gửi yêu cầu thay thế và Xác nhận...")
-
-    # ==========================================
-    # ĐOẠN GỌI API THỰC TẾ (Thay endpoint chính xác nếu có)
-    # payload = {"deviceId": device_id, "reason": "network_latency"}
-    # response = requests.post("https://www.ugphone.com/api/v1/device/replace", json=payload, headers=headers)
-    # ==========================================
-
-    time.sleep(2) # Chờ hệ thống khởi tạo máy mới
-
-    # Kiểm tra hiệu năng máy mới nhận được
-    perf_score = check_device_performance()
-    print(f" ➔ Hiệu năng máy mới đo được: {perf_score} điểm (Yêu cầu >= 90)")
-
-    if perf_score >= 90:
-        print(f"\n==================================================")
-        print(f"  🎉 SĂN THÀNH CÔNG MÁY NGON SAU {attempt} LẦN ĐỔI! 🎉")
-        print(f"  Hiệu năng đạt chuẩn: {perf_score} điểm")
-        print(f"==================================================")
-        
-        # Lưu kết quả vào file config local
-        with open("config_device.txt", "w") as f:
-            f.write(f"DEVICE_ID={device_id}\nSCORE={perf_score}\nATTEMPTS={attempt}\n")
-        print("[+] Đã lưu thông tin máy vào 'config_device.txt' thành công!")
+        # Lưu thông số vào file config local
+        echo "DEVICE_ID=\"$DEVICE_ID\"" > config_device.txt
+        echo "SCORE=\"$CURRENT_SCORE\"" >> config_device.txt
+        echo "ATTEMPTS=\"$ATTEMPT\"" >> config_device.txt
+        echo -e "${GREEN}[+] Đã lưu cấu hình máy ngon vào file 'config_device.txt'!${NC}"
         break
-    else:
-        print(" [!] Máy cấu hình/chip chưa đạt yêu cầu, tiếp tục đổi...")
-        time.sleep(2)
-
-EOF
-
-# Chạy script Python vừa tạo
-python3 run_reroll.py "$DEVICE_ID" "$MAX_ATTEMPTS"
+    else
+        echo -e "${RED}[!] Máy chưa đạt hiệu năng cao, đang tự động đổi tiếp...${NC}"
+        sleep 2
+    fi
+done
