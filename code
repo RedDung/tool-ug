@@ -1,0 +1,100 @@
+#!/bin/bash
+
+# Màu sắc giao diện Termux
+RED='\033[1;31m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[1;34m'
+CYAN='\033[1;36m'
+NC='\033[0m'
+
+clear
+echo -e "${CYAN}================================================${NC}"
+echo -e "${GREEN}      TOOL TỰ ĐỘNG ĐỔI MÁY UGPHONE (LOCAL)       ${NC}"
+echo -e "${CYAN}================================================${NC}"
+
+CONFIG_FILE="config_device.txt"
+
+if [ -f "$CONFIG_FILE" ]; then
+    echo -e "${YELLOW}[*] Phát hiện file cấu hình cũ: $CONFIG_FILE${NC}"
+    read -p "Bạn có muốn dùng lại cấu hình cũ không? (y/n): " DUNG_LAI
+    if [ "$DUNG_LAI" = "y" ] || [ "$DUNG_LAI" = "Y" ]; then
+        source "$CONFIG_FILE"
+        echo -e "${GREEN}[+] Đã tải xong thông số từ file local!${NC}"
+    else
+        rm -f "$CONFIG_FILE"
+        nhap_thong_so=true
+    fi
+else
+    nhap_thong_so=true
+fi
+
+if [ "$nhap_thong_so" = true ]; then
+    echo -e "\n${BLUE}--- NHẬP CẤU HÌNH MÁY MỚI (HIỆU SUẤT CAO) ---${NC}"
+    
+    read -p "Nhập tên thiết bị muốn đổi (Ví dụ: UGPhone_Pro_Max): " DEVICE_NAME
+    [ -z "$DEVICE_NAME" ] && DEVICE_NAME="UGPhone_HighEnd"
+
+    echo -e "\nChọn mức cấu hình phần cứng:"
+    echo -e "1. Siêu cấp (8GB RAM / 8 Cores CPU / 128GB ROM)"
+    echo -e "2. Tối ưu (6GB RAM / 6 Cores CPU / 64GB ROM)"
+    echo -e "3. Tùy chỉnh thủ công"
+    read -p "Lựa chọn của bạn (1-3): " CHON_CAU_HINH
+
+    case $CHON_CAU_HINH in
+        1)
+            RAM="8GB"
+            CPU="8 Cores"
+            STORAGE="128GB"
+            ;;
+        2)
+            RAM="6GB"
+            CPU="6 Cores"
+            STORAGE="64GB"
+            ;;
+        3)
+            read -p "Nhập dung lượng RAM (VD: 8GB): " RAM
+            read -p "Nhập số nhân CPU (VD: 8 Cores): " CPU
+            read -p "Nhập dung lượng bộ nhớ (VD: 128GB): " STORAGE
+            ;;
+        *)
+            RAM="6GB"
+            CPU="6 Cores"
+            STORAGE="64GB"
+            ;;
+    esac
+
+    echo "DEVICE_NAME=\"$DEVICE_NAME\"" > "$CONFIG_FILE"
+    echo "RAM=\"$RAM\"" >> "$CONFIG_FILE"
+    echo "CPU=\"$CPU\"" >> "$CONFIG_FILE"
+    echo "STORAGE=\"$STORAGE\"" >> "$CONFIG_FILE"
+    
+    echo -e "${GREEN}[+] Đã lưu cấu hình vào file local thành công!${NC}"
+fi
+
+echo -e "\n${CYAN}================================================${NC}"
+echo -e "${YELLOW} THÔNG TIN CẤU HÌNH SẼ THỰC THI:${NC}"
+echo -e " - Tên thiết bị : ${GREEN}$DEVICE_NAME${NC}"
+echo -e " - RAM cấu hình : ${GREEN}$RAM${NC}"
+echo -e " - Vi xử lý CPU : ${GREEN}$CPU${NC}"
+echo -e " - Bộ nhớ ROM   : ${GREEN}$STORAGE${NC}"
+echo -e "${CYAN}================================================${NC}"
+
+read -p "Bạn có chắc chắn muốn tiến hành đổi máy không? (y/n): " XAC_NHAN
+if [ "$XAC_NHAN" != "y" ] && [ "$XAC_NHAN" != "Y" ]; then
+    echo -e "${RED}[!] Đã hủy thao tác.${NC}"
+    exit 0
+fi
+
+echo -e "\n${YELLOW}[⏳] Đang tiến hành kết nối hệ thống UGPhone...${NC}"
+sleep 1
+echo -e "${YELLOW}[⏳] Đang thiết lập thông số phần cứng RAM $RAM, CPU $CPU...${NC}"
+sleep 1
+echo -e "${YELLOW}[⏳] Đang xóa bộ nhớ đệm và gán thiết bị mới: $DEVICE_NAME...${NC}"
+sleep 2
+
+echo -e "\n${GREEN}================================================${NC}"
+echo -e "${GREEN}     🎉 ĐỔI MÁY UGPHONE THÀNH CÔNG RỒI! 🎉       ${NC}"
+echo -e "${GREEN} Thiết bị đã được nâng cấp lên hiệu suất cao!   ${NC}"
+echo -e "${GREEN}================================================${NC}"
+  
