@@ -1,12 +1,6 @@
 import json
-import getpass
 import sys
-import time
 import os
-
-# =====================================
-#       UGPHONE AUTO REROLL V2
-# =====================================
 
 GREEN = "\033[1;32m"
 RED = "\033[1;31m"
@@ -26,30 +20,40 @@ def banner():
 
 
 def input_local():
-    print(YELLOW + "[+] Dán Local UGPhone.")
-    print("[+] Nhấn Enter hai lần để kết thúc." + RESET)
-
-    lines = []
-
     while True:
+        print(YELLOW + "\n[+] Dán Local UGPhone.")
+        print("[+] Nhấn Enter hai lần để kết thúc." + RESET)
+
+        lines = []
+
+        while True:
+            try:
+                line = input()
+            except EOFError:
+                return None
+
+            if line == "":
+                if lines:
+                    break
+                print(RED + "[!] Chưa nhập Local!" + RESET)
+                continue
+
+            lines.append(line)
+
+        raw = "\n".join(lines)
+
         try:
-            line = getpass.getpass("")
-        except EOFError:
-            break
+            data = json.loads(raw)
 
-        if not line:
-            break
+            if not isinstance(data, dict):
+                raise ValueError("JSON phải là object")
 
-        lines.append(line)
+            if check_local(data):
+                return data
 
-    raw = "\n".join(lines)
-
-    try:
-        data = json.loads(raw)
-        return data
-    except json.JSONDecodeError:
-        print(RED + "[!] Local JSON không hợp lệ!" + RESET)
-        return None
+        except (json.JSONDecodeError, ValueError) as e:
+            print(RED + f"\n[!] Local không hợp lệ: {e}" + RESET)
+            print(YELLOW + "[+] Hãy dán lại Local!" + RESET)
 
 
 def check_local(data):
@@ -59,54 +63,62 @@ def check_local(data):
         "UGPHONE-MQTT"
     ]
 
-    for key in required:
-        if key not in data:
-            print(RED + f"[!] Thiếu trường: {key}" + RESET)
-            return False
+    missing = [key for key in required if key not in data]
 
-    print(GREEN + "[+] Đã nhận diện cấu trúc Local." + RESET)
+    if missing:
+        print(RED + "\n[!] Local thiếu trường:" + RESET)
+
+        for key in missing:
+            print(RED + " - " + key + RESET)
+
+        return False
+
+    if not isinstance(data["UGPHONE-MQTT"], dict):
+        print(RED + "[!] Cấu trúc MQTT không hợp lệ!" + RESET)
+        return False
+
+    print(GREEN + "\n[+] Đã nhận diện cấu trúc Local!" + RESET)
     return True
 
 
 def main():
-    banner()
+    while True:
+        banner()
 
-    print("[1] Nhập Local UGPhone")
-    print("[2] Thoát")
+        print("[1] Nhập Local UGPhone")
+        print("[2] Thoát")
 
-    choice = input("\nLựa chọn: ")
+        choice = input("\nLựa chọn: ").strip()
 
-    if choice == "2":
-        sys.exit()
+        if choice == "2":
+            print(YELLOW + "Đã thoát." + RESET)
+            break
 
-    if choice != "1":
-        return
+        if choice != "1":
+            print(RED + "[!] Lựa chọn không hợp lệ!" + RESET)
+            input("Nhấn Enter để tiếp tục...")
+            continue
 
-    data = input_local()
+        data = input_local()
 
-    if data is None:
-        return
+        if data is None:
+            break
 
-    if not check_local(data):
-        return
+        print(CYAN + "\n========== LOCAL INFO ==========")
+        print("UGPHONE ID:", data.get("UGPHONE-ID"))
+        print("Language:", data.get("ugPhoneLang", "Unknown"))
+        print("MQTT:", "Available")
+        print("================================" + RESET)
 
-    print(CYAN + "\n========== LOCAL INFO ==========")
-    print("UGPHONE ID:", data.get("UGPHONE-ID"))
-    print("Language:", data.get("ugPhoneLang", "Unknown"))
-    print("MQTT:", "Available" if data.get("UGPHONE-MQTT") else "Unavailable")
-    print("================================" + RESET)
-
-    print(YELLOW + """
-[!] Local đã được kiểm tra cấu trúc.
-
+        print(YELLOW + """
+[!] Đã kiểm tra cấu trúc Local.
 [!] Chưa kết nối UGPhone.
 [!] Chưa thực hiện thay thế thiết bị.
-
-Cần tích hợp giao thức Device Replace
-và Device Hardware Info chính thức.
 """ + RESET)
 
-    data.clear()
+        data.clear()
+
+        input("\nNhấn Enter để quay lại menu...")
 
 
 if __name__ == "__main__":
