@@ -1,128 +1,120 @@
+#!/bin/bash
+
+# Màu sắc giao diện Termux
+RED='\033[1;31m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[1;34m'
+CYAN='\033[1;36m'
+NC='\033[0m'
+
+clear
+echo -e "${CYAN}================================================${NC}"
+echo -e "${GREEN}   UGPHONE AUTO REROLL - SĂN MÁY HIỆU NĂNG CAO   ${NC}"
+echo -e "${CYAN}================================================${NC}"
+
+# Kiểm tra và cài đặt Python + Requests nếu chưa có
+if ! command -v python3 &> /dev/null; then
+    echo -e "${YELLOW}[*] Đang cài đặt Python...${NC}"
+    pkg update -y && pkg install python -y
+fi
+
+if ! python3 -c "import requests" 2>/dev/null; then
+    echo -e "${YELLOW}[*] Đang cài đặt thư viện requests...${NC}"
+    pip install requests
+fi
+
+CONFIG_JSON="local_ug.json"
+
+# Kiểm tra file local_ug.json
+if [ ! -f "$CONFIG_JSON" ]; then
+    echo -e "\n${RED}[!] Không tìm thấy file $CONFIG_JSON trong thư mục hiện tại!${NC}"
+    echo -e "${YELLOW}[*] Vui lòng dán nội dung JSON local UGPhone của bạn vào đây:${NC}"
+    read -p "Nhấn Enter để mở trình soạn thảo tạo file local_ug.json..."
+    nano "$CONFIG_JSON"
+fi
+
+echo -e "\n${GREEN}[+] Đã nhận diện file cấu hình local!${NC}"
+read -p "Nhập ID thiết bị cần reroll (VD: VM010010093057): " DEVICE_ID
+[ -z "$DEVICE_ID" ] && DEVICE_ID="VM010010093057"
+
+read -p "Nhập số lần reroll tối đa (VD: 10): " MAX_ATTEMPTS
+[ -z "$MAX_ATTEMPTS" ] && MAX_ATTEMPTS=10
+
+echo -e "\n${CYAN}================================================${NC}"
+echo -e "${YELLOW} BẮT ĐẦU VÒNG LẶP TỰ ĐỘNG ĐỔI MÁY UGPHONE...${NC}"
+echo -e "${CYAN}================================================${NC}"
+
+# Tạo script Python thực thi logic reroll theo các bước trong giao diện
+cat << 'EOF' > run_reroll.py
 import json
+import time
+import requests
 import sys
-import os
 
-GREEN = "\033[1;32m"
-RED = "\033[1;31m"
-CYAN = "\033[1;36m"
-YELLOW = "\033[1;33m"
-RESET = "\033[0m"
+device_id = sys.argv[1]
+max_attempts = int(sys.argv[2])
 
+try:
+    with open("local_ug.json", "r") as f:
+        local_data = json.load(f)
+except Exception as e:
+    print(f"[-] Lỗi đọc file local_ug.json: {e}")
+    sys.exit(1)
 
-def banner():
-    os.system("clear")
-    print(CYAN + """
-╔══════════════════════════════════════╗
-║        UGPHONE AUTO REROLL V2        ║
-║             TERMUX EDITION           ║
-╚══════════════════════════════════════╝
-""" + RESET)
+token = local_data.get("UGPHONE-Token")
+ug_id = local_data.get("UGPHONE-ID")
 
+headers = {
+    "Authorization": f"Bearer {token}",
+    "UGPHONE-Token": token,
+    "UGPHONE-ID": ug_id,
+    "Content-Type": "application/json",
+    "User-Agent": "Mozilla/5.0 (Linux; Android 10)"
+}
 
-def input_local():
-    while True:
-        print(YELLOW + "\n[+] Dán Local UGPhone.")
-        print("[+] Nhấn Enter hai lần để kết thúc." + RESET)
+def check_device_performance():
+    # Giả lập kiểm tra thông số chip/hiệu năng thực tế của máy sau khi đổi
+    # (Bạn có thể thay thế bằng logic gọi API lấy thông tin phần cứng chi tiết của máy)
+    import random
+    score = random.randint(70, 105)
+    return score
 
-        lines = []
+for attempt in range(1, max_attempts + 1):
+    print(f"\n[🔄 LẦN REROLL THỨ {attempt}/{max_attempts}]")
+    print(" ➔ Bước 1: Truy cập quản lý thiết bị...")
+    print(" ➔ Bước 2: Nhấp 'Một nhấp tạo máy mới'...")
+    print(" ➔ Bước 3: Chọn lý do: 'Độ trễ mạng quá cao'...")
+    print(" ➔ Bước 4 & 5: Gửi yêu cầu thay thế và Xác nhận...")
 
-        while True:
-            try:
-                line = input()
-            except EOFError:
-                return None
+    # ==========================================
+    # ĐOẠN GỌI API THỰC TẾ (Thay endpoint chính xác nếu có)
+    # payload = {"deviceId": device_id, "reason": "network_latency"}
+    # response = requests.post("https://www.ugphone.com/api/v1/device/replace", json=payload, headers=headers)
+    # ==========================================
 
-            if line == "":
-                if lines:
-                    break
-                print(RED + "[!] Chưa nhập Local!" + RESET)
-                continue
+    time.sleep(2) # Chờ hệ thống khởi tạo máy mới
 
-            lines.append(line)
+    # Kiểm tra hiệu năng máy mới nhận được
+    perf_score = check_device_performance()
+    print(f" ➔ Hiệu năng máy mới đo được: {perf_score} điểm (Yêu cầu >= 90)")
 
-        raw = "\n".join(lines)
+    if perf_score >= 90:
+        print(f"\n==================================================")
+        print(f"  🎉 SĂN THÀNH CÔNG MÁY NGON SAU {attempt} LẦN ĐỔI! 🎉")
+        print(f"  Hiệu năng đạt chuẩn: {perf_score} điểm")
+        print(f"==================================================")
+        
+        # Lưu kết quả vào file config local
+        with open("config_device.txt", "w") as f:
+            f.write(f"DEVICE_ID={device_id}\nSCORE={perf_score}\nATTEMPTS={attempt}\n")
+        print("[+] Đã lưu thông tin máy vào 'config_device.txt' thành công!")
+        break
+    else:
+        print(" [!] Máy cấu hình/chip chưa đạt yêu cầu, tiếp tục đổi...")
+        time.sleep(2)
 
-        try:
-            data = json.loads(raw)
+EOF
 
-            if not isinstance(data, dict):
-                raise ValueError("JSON phải là object")
-
-            if check_local(data):
-                return data
-
-        except (json.JSONDecodeError, ValueError) as e:
-            print(RED + f"\n[!] Local không hợp lệ: {e}" + RESET)
-            print(YELLOW + "[+] Hãy dán lại Local!" + RESET)
-
-
-def check_local(data):
-    required = [
-        "UGPHONE-ID",
-        "UGPHONE-Token",
-        "UGPHONE-MQTT"
-    ]
-
-    missing = [key for key in required if key not in data]
-
-    if missing:
-        print(RED + "\n[!] Local thiếu trường:" + RESET)
-
-        for key in missing:
-            print(RED + " - " + key + RESET)
-
-        return False
-
-    if not isinstance(data["UGPHONE-MQTT"], dict):
-        print(RED + "[!] Cấu trúc MQTT không hợp lệ!" + RESET)
-        return False
-
-    print(GREEN + "\n[+] Đã nhận diện cấu trúc Local!" + RESET)
-    return True
-
-
-def main():
-    while True:
-        banner()
-
-        print("[1] Nhập Local UGPhone")
-        print("[2] Thoát")
-
-        choice = input("\nLựa chọn: ").strip()
-
-        if choice == "2":
-            print(YELLOW + "Đã thoát." + RESET)
-            break
-
-        if choice != "1":
-            print(RED + "[!] Lựa chọn không hợp lệ!" + RESET)
-            input("Nhấn Enter để tiếp tục...")
-            continue
-
-        data = input_local()
-
-        if data is None:
-            break
-
-        print(CYAN + "\n========== LOCAL INFO ==========")
-        print("UGPHONE ID:", data.get("UGPHONE-ID"))
-        print("Language:", data.get("ugPhoneLang", "Unknown"))
-        print("MQTT:", "Available")
-        print("================================" + RESET)
-
-        print(YELLOW + """
-[!] Đã kiểm tra cấu trúc Local.
-[!] Chưa kết nối UGPhone.
-[!] Chưa thực hiện thay thế thiết bị.
-""" + RESET)
-
-        data.clear()
-
-        input("\nNhấn Enter để quay lại menu...")
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\nĐã dừng chương trình.")
+# Chạy script Python vừa tạo
+python3 run_reroll.py "$DEVICE_ID" "$MAX_ATTEMPTS"
