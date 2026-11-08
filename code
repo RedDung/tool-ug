@@ -1,83 +1,116 @@
-#!/bin/bash
+import json
+import getpass
+import sys
+import time
+import os
 
-# Màu sắc giao diện Termux
-RED='\033[1;31m'
-GREEN='\033[1;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[1;34m'
-CYAN='\033[1;36m'
-NC='\033[0m'
+# =====================================
+#       UGPHONE AUTO REROLL V2
+# =====================================
 
-clear
-echo -e "${CYAN}================================================${NC}"
-echo -e "${GREEN}   AUTO REROLL UGPHONE - SĂN MÁY HIỆU NĂNG CAO   ${NC}"
-echo -e "${CYAN}================================================${NC}"
+GREEN = "\033[1;32m"
+RED = "\033[1;31m"
+CYAN = "\033[1;36m"
+YELLOW = "\033[1;33m"
+RESET = "\033[0m"
 
-CONFIG_FILE="config_device.txt"
 
-# Kiểm tra file cấu hình local cũ
-if [ -f "$CONFIG_FILE" ]; then
-    echo -e "${YELLOW}[*] Phát hiện file cấu hình cũ: $CONFIG_FILE${NC}"
-    read -p "Bạn có muốn dùng lại tiêu chí cũ không? (y/n): " DUNG_LAI
-    if [ "$DUNG_LAI" = "y" ] || [ "$DUNG_LAI" = "Y" ]; then
-        source "$CONFIG_FILE"
-        echo -e "${GREEN}[+] Đã tải xong tiêu chí từ file local!${NC}"
-    else
-        rm -f "$CONFIG_FILE"
-        nhap_chi_tieu=true
-    fi
-else
-    nhap_chi_tieu=true
-fi
+def banner():
+    os.system("clear")
+    print(CYAN + """
+╔══════════════════════════════════════╗
+║        UGPHONE AUTO REROLL V2        ║
+║             TERMUX EDITION           ║
+╚══════════════════════════════════════╝
+""" + RESET)
 
-if [ "$nhap_chi_tieu" = true ]; then
-    echo -e "\n${BLUE}--- THIẾT LẬP TIÊU CHÍ SĂN MÁY ---${NC}"
-    read -p "Nhập mức điểm hiệu năng/benchmark tối thiểu cần đạt (VD: 90): " TARGET_SCORE
-    [ -z "$TARGET_SCORE" ] && TARGET_SCORE=90
 
-    # Lưu tiêu chí vào file local
-    echo "TARGET_SCORE=\"$TARGET_SCORE\"" > "$CONFIG_FILE"
-    echo -e "${GREEN}[+] Đã lưu tiêu chí vào $CONFIG_FILE thành công!${NC}"
-fi
+def input_local():
+    print(YELLOW + "[+] Dán Local UGPhone.")
+    print("[+] Nhấn Enter hai lần để kết thúc." + RESET)
 
-echo -e "\n${CYAN}================================================${NC}"
-echo -e "${YELLOW} BẮT ĐẦU QUÁ TRÌNH REROLL TỰ ĐỘNG LIÊN TỤC...${NC}"
-echo -e "${CYAN}================================================${NC}"
+    lines = []
 
-LAN_DOI=0
+    while True:
+        try:
+            line = getpass.getpass("")
+        except EOFError:
+            break
 
-while true; do
-    LAN_DOI=$((LAN_DOI + 1))
-    echo -e "\n${YELLOW}[🔄 LẦN REROLL THỨ $LAN_DOI] Đang yêu cầu cấp thiết bị mới...${NC}"
-    
-    # ==========================================================
-    # 🛠️ KHU VỰC THỰC THI ĐỔI MÁY THỰC TẾ
-    # (Bạn hãy thay thế hoặc bổ sung lệnh gọi tool/API đổi máy UGPhone vào đây)
-    # ==========================================================
-    # Ví dụ: ./ugphone_tool change_device
-    # ==========================================================
-    
-    # 🧪 PHẦN GIẢ LẬP ĐO HIỆU NĂNG (Thay bằng lệnh check chip/hiệu năng thực tế của bạn)
-    # Hàm RANDOM giả lập điểm số trả về từ 75 đến 105 điểm mỗi lần đổi máy
-    CURRENT_SCORE=$((RANDOM % 31 + 75))
-    
-    echo -e " ➔ Đã gán thông số phần cứng mới."
-    echo -e " ➔ Hiệu năng thực tế đo được: ${CYAN}$CURRENT_SCORE điểm${NC} (Mục tiêu: >= $TARGET_SCORE)"
+        if not line:
+            break
 
-    # Kiểm tra xem máy đã đạt tiêu chuẩn chưa
-    if [ "$CURRENT_SCORE" -ge "$TARGET_SCORE" ]; then
-        echo -e "\n${GREEN}================================================${NC}"
-        echo -e "${GREEN}  🎉 TÌM ĐƯỢC MÁY HIỆU NĂNG CAO SAU $LAN_DOI LẦN! 🎉 ${NC}"
-        echo -e "${GREEN}  Đạt điểm số: $CURRENT_SCORE (Đạt chuẩn yêu cầu)${NC}"
-        echo -e "${GREEN}================================================${NC}"
-        
-        # Lưu kết quả thành công vào file cấu hình local
-        echo "FINAL_SCORE=\"$CURRENT_SCORE\"" >> "$CONFIG_FILE"
-        echo "TOTAL_ATTEMPTS=\"$LAN_DOI\"" >> "$CONFIG_FILE"
-        echo -e "${GREEN}[+] Đã lưu thông tin máy ngon vào '$CONFIG_FILE'!${NC}"
-        break
-    else
-        echo -e "${RED}[!] Máy hiệu năng thấp ($CURRENT_SCORE điểm), đang tự động đổi tiếp...${NC}"
-        sleep 1 # Dừng 1 giây trước khi sang lượt reroll tiếp theo
-    fi
-done
+        lines.append(line)
+
+    raw = "\n".join(lines)
+
+    try:
+        data = json.loads(raw)
+        return data
+    except json.JSONDecodeError:
+        print(RED + "[!] Local JSON không hợp lệ!" + RESET)
+        return None
+
+
+def check_local(data):
+    required = [
+        "UGPHONE-ID",
+        "UGPHONE-Token",
+        "UGPHONE-MQTT"
+    ]
+
+    for key in required:
+        if key not in data:
+            print(RED + f"[!] Thiếu trường: {key}" + RESET)
+            return False
+
+    print(GREEN + "[+] Đã nhận diện cấu trúc Local." + RESET)
+    return True
+
+
+def main():
+    banner()
+
+    print("[1] Nhập Local UGPhone")
+    print("[2] Thoát")
+
+    choice = input("\nLựa chọn: ")
+
+    if choice == "2":
+        sys.exit()
+
+    if choice != "1":
+        return
+
+    data = input_local()
+
+    if data is None:
+        return
+
+    if not check_local(data):
+        return
+
+    print(CYAN + "\n========== LOCAL INFO ==========")
+    print("UGPHONE ID:", data.get("UGPHONE-ID"))
+    print("Language:", data.get("ugPhoneLang", "Unknown"))
+    print("MQTT:", "Available" if data.get("UGPHONE-MQTT") else "Unavailable")
+    print("================================" + RESET)
+
+    print(YELLOW + """
+[!] Local đã được kiểm tra cấu trúc.
+
+[!] Chưa kết nối UGPhone.
+[!] Chưa thực hiện thay thế thiết bị.
+
+Cần tích hợp giao thức Device Replace
+và Device Hardware Info chính thức.
+""" + RESET)
+
+    data.clear()
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nĐã dừng chương trình.")
