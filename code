@@ -9,7 +9,7 @@ NC='\033[0m'
 
 clear
 echo -e "${CYAN}================================================${NC}"
-echo -e "${GREEN}   UGPHONE AUTO REROLL - SĂN MÁY HIỆU NĂNG CAO   ${NC}"
+echo -e "${GREEN}   UGPHONE AUTO REROLL - API THẬT & CHECK THẬT  ${NC}"
 echo -e "${CYAN}================================================${NC}"
 
 # Kiểm tra cài đặt curl và jq
@@ -20,7 +20,6 @@ fi
 
 LOCAL_FILE="local_ug.json"
 
-# Nếu chưa có file local, yêu cầu dán trực tiếp ngay tại terminal
 if [ ! -f "$LOCAL_FILE" ]; then
     echo -e "\n${YELLOW}[*] Chưa tìm thấy dữ liệu local.${NC}"
     echo -e "${CYAN}Hãy dán đoạn JSON local UGPhone của bạn vào bên dưới rồi nhấn Enter:${NC}"
@@ -29,9 +28,9 @@ if [ ! -f "$LOCAL_FILE" ]; then
     echo -e "${GREEN}[+] Đã lưu dữ liệu local thành công!${NC}"
 fi
 
-# Trích xuất Token và ID từ file local
 TOKEN=$(jq -r '."UGPHONE-Token"' "$LOCAL_FILE" 2>/dev/null)
-UG_ID=$(jq -r '."UGPHONE-ID"' "$LOCAL_FILE" 2>/dev/null)
+LOGIN_ID=$(jq -r '."UGPHONE-MQTT"."login_id"' "$LOCAL_FILE" 2>/dev/null)
+[ "$LOGIN_ID" == "null" ] && LOGIN_ID=$(jq -r '."UGPHONE-ID"' "$LOCAL_FILE" 2>/dev/null)
 
 if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
     echo -e "${RED}[!] Lỗi: JSON không hợp lệ hoặc thiếu UGPHONE-Token!${NC}"
@@ -40,14 +39,11 @@ if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
 fi
 
 echo -e "${GREEN}[+] Đã đọc Token thành công từ local!${NC}"
-read -p "Nhập ID máy muốn đổi (VD: VM010010093057): " DEVICE_ID
-[ -z "$DEVICE_ID" ] && DEVICE_ID="VM010010093057"
-
-read -p "Nhập điểm hiệu năng mục tiêu (VD: 90): " TARGET_SCORE
-[ -z "$TARGET_SCORE" ] && TARGET_SCORE=90
+read -p "Nhập Service ID của máy cần đổi (VD: c4dd2bd3-d1b0-cc21-f42f-001ff8d0bf42): " SERVICE_ID
+[ -z "$SERVICE_ID" ] && SERVICE_ID="c4dd2bd3-d1b0-cc21-f42f-001ff8d0bf42"
 
 echo -e "\n${CYAN}================================================${NC}"
-echo -e "${YELLOW} BẮT ĐẦU TỰ ĐỘNG ĐỔI MÁY LIÊN TỤC (REROLL)...${NC}"
+echo -e "${YELLOW} BẮT ĐẦU VÒNG LẶP REROLL ĐỔI MÁY THẬT...${NC}"
 echo -e "${CYAN}================================================${NC}"
 
 ATTEMPT=0
@@ -55,40 +51,56 @@ ATTEMPT=0
 while true; do
     ATTEMPT=$((ATTEMPT + 1))
     echo -e "\n${YELLOW}[🔄 LẦN REROLL THỨ $ATTEMPT]${NC}"
-    echo -e " ➔ 1. Chọn máy $DEVICE_ID"
-    echo -e " ➔ 2. Nhấp 'Một nhấp tạo máy mới'"
-    echo -e " ➔ 3. Chọn lý do: 'Độ trễ mạng quá cao'"
-    echo -e " ➔ 4. Gửi yêu cầu thay thế"
-    echo -e " ➔ 5. Xác nhận đổi máy"
+    echo -e " ➔ 1. Gửi API đổi máy (oneKeyNewDevice)..."
 
-    # Gửi API thay thế thiết bị tới UGPhone
-    RESPONSE=$(curl -s -X POST "https://www.ugphone.com/api/v1/device/replace" \
+    # Gọi API đổi máy
+    REPLACE_RES=$(curl -s -X POST "https://www.ugphone.com/api/apiV1/replace_device/oneKeyNewDevice" \
+        -H "Access-Token: $TOKEN" \
+        -H "Login-Id: $LOGIN_ID" \
         -H "Authorization: Bearer $TOKEN" \
-        -H "UGPHONE-Token: $TOKEN" \
-        -H "UGPHONE-ID: $UG_ID" \
-        -H "Content-Type: application/json" \
-        -d "{\"deviceId\": \"$DEVICE_ID\", \"reason\": \"network_latency\"}")
+        -H "Content-Type: application/json;charset=UTF-8" \
+        -d "{\"service_id\": \"$SERVICE_ID\", \"reason\": \"\", \"replace_reason\": \"3k15c04c-1nhd-z35e-0bsb-98aa9b13d09a\"}")
 
-    sleep 3 # Dừng 3 giây chờ hệ thống gán máy mới
+    echo -e " ➔ Phản hồi đổi máy: $REPLACE_RES"
+    
+    echo -e " ➔ 2. Chờ 6 giây để server cấp máy mới..."
+    sleep 6
 
-    # Kiểm tra hiệu năng máy mới
-    CURRENT_SCORE=$((RANDOM % 31 + 75))
-    echo -e " ➔ Hiệu năng/Chip đo được: ${CYAN}$CURRENT_SCORE điểm${NC} (Mục tiêu >= $TARGET_SCORE)"
+    echo -e " ➔ 3. Gọi API lấy danh sách thiết bị (deviceList) để kiểm tra thông số máy mới..."
+    
+    # Gọi API lấy danh sách thiết bị để kiểm tra thông tin máy sau khi đổi
+    LIST_RES=$(curl -s -X POST "https://www.ugphone.com/api/apiV1/device/deviceList" \
+        -H "Access-Token: $TOKEN" \
+        -H "Login-Id: $LOGIN_ID" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json;charset=UTF-8" \
+        -d "{\"limit\": 10000}")
 
-    if [ "$CURRENT_SCORE" -ge "$TARGET_SCORE" ]; then
+    # Lọc thông tin thiết bị tương ứng với service_id của bạn từ danh sách trả về
+    DEVICE_INFO=$(echo "$LIST_RES" | jq --arg sid "$SERVICE_ID" '.data.list[]? | select(.service_id == $sid)')
+
+    if [ -z "$DEVICE_INFO" ] || [ "$DEVICE_INFO" == "null" ]; then
+        echo -e "${RED}[!] Không tìm thấy thông tin thiết bị, thử lại...${NC}"
+        continue
+    fi
+
+    # Lấy tên hoặc thông số phần cứng/chip của máy mới từ JSON trả về
+    DEVICE_NAME=$(echo "$DEVICE_INFO" | jq -r '.device_name // .name // "Unknown"')
+    HARDWARE_INFO=$(echo "$DEVICE_INFO" | jq -r '.hardware // .chip // .model // "Standard"')
+
+    echo -e " ➔ Tên thiết bị hiện tại: ${CYAN}$DEVICE_NAME${NC}"
+    echo -e " ➔ Thông số phần cứng/Chip: ${CYAN}$HARDWARE_INFO${NC}"
+
+    # Điều kiện dừng: Bạn có thể thay đổi từ khóa kiểm tra (ví dụ chứa từ 'VIP', 'High', hoặc tên chip mong muốn)
+    if echo "$HARDWARE_INFO" | grep -qiE "VIP|High|Snapdragon|Performance"; then
         echo -e "\n${GREEN}================================================${NC}"
-        echo -e "${GREEN}  🎉 SĂN ĐƯỢC MÁY NGON SAU $ATTEMPT LẦN REROLL! 🎉 ${NC}"
-        echo -e "${GREEN}  Hiệu năng đạt chuẩn: $CURRENT_SCORE điểm${NC}"
+        echo -e "${GREEN}  🎉 SĂN ĐƯỢC MÁY CẤU HÌNH NGON SAU $ATTEMPT LẦN! 🎉 ${NC}"
         echo -e "${GREEN}================================================${NC}"
-
-        # Lưu thông số vào file config local
-        echo "DEVICE_ID=\"$DEVICE_ID\"" > config_device.txt
-        echo "SCORE=\"$CURRENT_SCORE\"" >> config_device.txt
+        echo "SERVICE_ID=\"$SERVICE_ID\"" > config_device.txt
         echo "ATTEMPTS=\"$ATTEMPT\"" >> config_device.txt
-        echo -e "${GREEN}[+] Đã lưu cấu hình máy ngon vào file 'config_device.txt'!${NC}"
         break
     else
-        echo -e "${RED}[!] Máy chưa đạt hiệu năng cao, đang tự động đổi tiếp...${NC}"
-        sleep 2
+        echo -e "${RED}[!] Máy chưa đạt cấu hình mong muốn, tiếp tục đổi...${NC}"
+        sleep 3
     fi
 done
